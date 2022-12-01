@@ -48,11 +48,11 @@ async function main() {
   const browser = await puppeteer.launch({
     headless: true,
   });
-  const links = await findTranscriptLinksMultiPage(browser, 300);
+  const links = await findTranscriptLinksMultiPage(browser, 5);
   console.log(links);
   for (let i = 0; i < links.length; i++) {
     const link = links[i];
-    const filename = 'output/' + path.basename(link) + '.txt';
+    const filename = 'live/' + path.basename(link) + '.txt';
     if (!fs.existsSync(filename)) {
       const transcript = await scrapeTranscript(browser, link);
       fs.writeFileSync(filename, transcript);
