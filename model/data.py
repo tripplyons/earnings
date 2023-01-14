@@ -82,9 +82,9 @@ def get_label(text, days=10, skip=1):
 
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
-# model_name = 'sentence-transformers/all-mpnet-base-v2'
-model_name = 'sentence-transformers/all-MiniLM-L6-v2'
+model_name = 'sentence-transformers/sentence-t5-base'
 model = SentenceTransformer(model_name).to(device)
+model_dimension = 768
 
 
 def get_features(text):

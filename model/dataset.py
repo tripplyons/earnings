@@ -1,10 +1,9 @@
-from data import get_label, get_features, get_ticker, get_timestamp, get_market_cap, get_unix_timestamp
+from data import get_label, get_features, get_ticker, get_timestamp, get_market_cap, get_unix_timestamp, model_dimension
 import os
 import numpy as np
 import h5py
 
 cache = h5py.File('cache.hdf5', 'a')
-
 
 def get_paths(path):
     for root, dirs, files in os.walk(path):
@@ -24,7 +23,7 @@ def save_cache():
     cache.close()
 
 
-def make_dataset(path, max_items=None):
+def make_dataset(path, max_items=None, recompute_features=False):
     # do everything through the cache to avoid reprocessing
     # the same data over and over again
     features = cache.get('features')
@@ -34,11 +33,12 @@ def make_dataset(path, max_items=None):
     market_caps = cache.get('market_caps')
     group_num = cache.get('group_num')
     current_group_num = 0
+    current_index = 0
 
     try:
         if features is None:
             features = cache.create_dataset(
-                'features', (0, 384), maxshape=(None, None))
+                'features', (0, model_dimension), maxshape=(None, None))
             labels = cache.create_dataset('labels', (0,), maxshape=(None,))
             tickers = cache.create_dataset(
                 'tickers', (0,), maxshape=(None,), dtype=h5py.string_dtype(encoding='utf-8'))
@@ -70,6 +70,13 @@ def make_dataset(path, max_items=None):
 
             if found_match:
                 print('skipping', ticker, timestamp)
+
+                if recompute_features:
+                    current_features = get_features(item)
+                    for feature in current_features:
+                        features[current_index] = feature
+                        current_index += 1
+
                 continue
 
             current_features = get_features(item)
@@ -89,6 +96,8 @@ def make_dataset(path, max_items=None):
                 market_caps[-1] = market_cap
                 group_num.resize(group_num.shape[0] + 1, axis=0)
                 group_num[-1] = current_group_num
+
+                current_index += 1
 
             current_group_num += 1
     except KeyboardInterrupt:
