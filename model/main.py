@@ -1,19 +1,32 @@
-from dataset import make_dataset, save_cache, get_recent_features
+from dataset import make_dataset, get_recent_features
 import numpy as np
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
-from sklearn.feature_selection import RFECV, SelectKBest, f_regression
-from sklearn.linear_model import LinearRegression, ElasticNetCV
+from sklearn.kernel_approximation import Nystroem
+from sklearn.svm import LinearSVR
+from data import save_caches
 import time
-
+from models import MetaRegressor
 
 def make_model():
     return make_pipeline(
         StandardScaler(),
-        SelectKBest(k=256, score_func=f_regression),
-        RFECV(LinearRegression(), step=0.1),
-        ElasticNetCV(n_jobs=-1, precompute=False)
+        Nystroem(n_components=1000, n_jobs=-1),
+        LinearSVR()
     )
+
+def make_meta_model(make_model):
+    return MetaRegressor(
+        make_model(),
+        make_model()
+    )
+
+def train_model(train_features, train_labels):
+    model = make_meta_model(make_model)
+
+    model.fit(train_features, train_labels)
+
+    return model
 
 
 def join_predictions(predictions):
@@ -21,44 +34,44 @@ def join_predictions(predictions):
 
 
 def main():
-    max_items = 1000
+    max_items = 2000
     data_dir = '../scraper/output'
     live_data_dir = '../scraper/live'
-    recompute_features = False
 
-    features, labels, tickers, timestamps, market_caps, group_num = make_dataset(
+    items = make_dataset(
         data_dir,
         max_items=max_items,
-        recompute_features=recompute_features
+        save_every=1000
     )
     
+    save_caches()
+    
+    print('Training...')
 
-    print('training')
+    order = np.argsort(items['timestamps'])
 
-    order = np.argsort(timestamps)
-
-    # valid_indices = order[~np.isnan(labels[order])] # doesn't work since it will be out of order
-    valid_indices = []
-    for i in order:
-        if not np.isnan(labels[i]):
-            valid_indices.append(i)
-    valid_indices = np.array(valid_indices)
+    valid_indices = order[np.nonzero(items['labels'][order])]
+    valid_indices = valid_indices[items['timestamps'][valid_indices] != 0]
+    valid_indices = np.sort(valid_indices)
 
     train_rate = 0.9
     num_train_indices = int(len(valid_indices) * train_rate)
 
+    # make sure we don't split a group
+    while items['group_num'][num_train_indices] == items['group_num'][num_train_indices - 1]:
+        num_train_indices -= 1
+
     train_indices = np.sort(valid_indices[:num_train_indices])
     test_indices = np.sort(valid_indices[num_train_indices:])
 
-    train_features = features[train_indices]
-    train_labels = labels[train_indices]
-    test_features = features[test_indices]
-    test_labels = labels[test_indices]
+    train_features = items['features'][train_indices]
+    train_labels = items['labels'][train_indices]
+    test_features = items['features'][test_indices]
+    test_labels = items['labels'][test_indices]
 
-    model = make_model()
-    model.fit(train_features, train_labels)
+    model = train_model(train_features, train_labels)
 
-    test_groups = group_num[test_indices]
+    test_groups = items['group_num'][test_indices]
     unique_test_groups = np.unique(test_groups)
 
     group_predictions = []
@@ -79,26 +92,28 @@ def main():
 
     print('Correlation:', np.corrcoef(group_predictions, group_labels)[0, 1])
 
-    save_cache()
-
-    # plt.scatter(group_predictions, group_labels)
-    # plt.show()
-
-    start_time = time.time() - 60 * 60 * 24 * 14
+    start_time = time.time() - 60 * 60 * 24 * 3
     recent_features, recent_tickers, recent_market_caps = get_recent_features(
         live_data_dir, start_time)
     recent_predictions = []
 
     for i in range(0, len(recent_features)):
-        recent_predictions.append(
-            join_predictions(model.predict(recent_features[i])))
+        recent_predictions.append([
+            join_predictions(model.regressor.predict(recent_features[i])),
+            join_predictions(model.predict(recent_features[i]))
+        ])
 
-    z_scores = (recent_predictions - np.mean(recent_predictions)) / \
-        np.std(recent_predictions)
+    recent_predictions = np.array(recent_predictions)
+    
+    z_scores = recent_predictions
+    z_scores[:, 0] -= np.mean(recent_predictions[:, 0])
+    z_scores[:, 0] /= np.std(recent_predictions[:, 0])
+    z_scores[:, 1] -= np.mean(recent_predictions[:, 1])
+    z_scores[:, 1] /= np.std(recent_predictions[:, 1])
 
     for i in range(0, len(recent_tickers)):
-        # if recent_market_caps[i] > 10 ** 8:
-        print(recent_tickers[i], z_scores[i])
+        line = f'{recent_tickers[i]}\t{z_scores[i][0]:.2f}\t{z_scores[i][1]:.2f}'
+        print(line)
 
 
 if __name__ == '__main__':
