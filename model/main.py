@@ -2,27 +2,18 @@ from dataset import make_dataset, get_recent_features
 import numpy as np
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
-from sklearn.kernel_approximation import Nystroem
-from sklearn.svm import LinearSVR
-from data import save_caches
+from models import ForwardForwardRegressor
 import time
-from models import MetaRegressor
 
 def make_model():
     return make_pipeline(
         StandardScaler(),
-        Nystroem(n_components=1000, n_jobs=-1),
-        LinearSVR()
+        ForwardForwardRegressor(10, threshold=2, epochs=100)
     )
 
-def make_meta_model(make_model):
-    return MetaRegressor(
-        make_model(),
-        make_model()
-    )
 
 def train_model(train_features, train_labels):
-    model = make_meta_model(make_model)
+    model = make_model()
 
     model.fit(train_features, train_labels)
 
@@ -41,11 +32,11 @@ def main():
     items = make_dataset(
         data_dir,
         max_items=max_items,
-        save_every=1000
+        save_every=max_items + 1
     )
-    
-    save_caches()
-    
+
+    # save_caches()
+
     print('Training...')
 
     order = np.argsort(items['timestamps'])
@@ -54,7 +45,7 @@ def main():
     valid_indices = valid_indices[items['timestamps'][valid_indices] != 0]
     valid_indices = np.sort(valid_indices)
 
-    train_rate = 0.9
+    train_rate = 0.8
     num_train_indices = int(len(valid_indices) * train_rate)
 
     # make sure we don't split a group
@@ -98,21 +89,17 @@ def main():
     recent_predictions = []
 
     for i in range(0, len(recent_features)):
-        recent_predictions.append([
-            join_predictions(model.regressor.predict(recent_features[i])),
+        recent_predictions.append(
             join_predictions(model.predict(recent_features[i]))
-        ])
+        )
 
     recent_predictions = np.array(recent_predictions)
-    
-    z_scores = recent_predictions
-    z_scores[:, 0] -= np.mean(recent_predictions[:, 0])
-    z_scores[:, 0] /= np.std(recent_predictions[:, 0])
-    z_scores[:, 1] -= np.mean(recent_predictions[:, 1])
-    z_scores[:, 1] /= np.std(recent_predictions[:, 1])
+
+    z_scores = (recent_predictions - np.mean(group_predictions)) / \
+        np.std(group_predictions)
 
     for i in range(0, len(recent_tickers)):
-        line = f'{recent_tickers[i]}\t{z_scores[i][0]:.2f}\t{z_scores[i][1]:.2f}'
+        line = f'{recent_tickers[i]}\t{z_scores[i]:.2f}'
         print(line)
 
 

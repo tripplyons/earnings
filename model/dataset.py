@@ -32,7 +32,7 @@ def make_dataset(path, max_items=None, save_every=100):
         for i, item in enumerate(get_items(path)):
             if max_items is not None and i >= max_items:
                 break
-            if i % save_every == 0:
+            if i % save_every == 0 and i != 0:
                 print(i)
                 save_caches()
 
@@ -56,7 +56,7 @@ def make_dataset(path, max_items=None, save_every=100):
 
             current_features = get_features(item)
             label = get_label(item)
-            market_cap = get_market_cap(item)
+            market_cap = get_market_cap(ticker)
 
             for feature in current_features:
                 items['features'].append(feature)
