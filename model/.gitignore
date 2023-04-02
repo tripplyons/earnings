@@ -4,3 +4,4 @@ __pycache__/
 *.pkl
 *.hdf5
 *.pkl.gz
+.env

@@ -1,4 +1,3 @@
-import yfinance as yf
 from sentence_transformers import SentenceTransformer
 import torch
 import regex as re
@@ -7,11 +6,20 @@ import numpy as np
 import sys
 import hashlib
 from caching import Cache
+from dotenv import load_dotenv
+from alpaca.data.historical import StockHistoricalDataClient
+from alpaca.data.requests import StockBarsRequest
+from alpaca.data.timeframe import TimeFrame, TimeFrameUnit
+import os
+import pandas as pd
 
+load_dotenv()
+api_key = os.getenv('ALPACA_API_KEY')
+api_secret = os.getenv('ALPACA_API_SECRET')
 
-labels_cache = Cache('labels_cache.pkl.gz')
-market_caps_cache = Cache('market_caps_cache.pkl.gz')
-features_cache = Cache('features_cache.pkl.gz')
+labels_cache = Cache('labels_cache.pkl', gz=False)
+market_caps_cache = Cache('market_caps_cache.pkl', gz=False)
+features_cache = Cache('features_cache.pkl', gz=False)
 
 
 def save_caches():
@@ -19,6 +27,7 @@ def save_caches():
     labels_cache.save()
     market_caps_cache.save()
     features_cache.save()
+    print('Done saving caches.')
 
 
 def hash_func(text):
@@ -31,23 +40,6 @@ def get_ticker(text):
         return ticker
     except:
         return None
-
-
-def get_market_cap(ticker):
-    if ticker in market_caps_cache.contents:
-        return market_caps_cache.contents[ticker]
-
-    try:
-        data = yf.Ticker(ticker)
-        cap = data.info['marketCap']
-        if cap is None:
-            market_caps_cache.contents[ticker] = 0
-            return 0
-        market_caps_cache.contents[ticker] = cap
-        return cap
-    except:
-        market_caps_cache.contents[ticker] = 0
-        return 0
 
 
 def get_timestamp(text):
@@ -71,6 +63,20 @@ def get_unix_timestamp(year, month, day):
         return 0
 
 
+def download_ticker(ticker, start, end):
+    timeframe = TimeFrame(1, TimeFrameUnit.Minute)
+    client = StockHistoricalDataClient(api_key, api_secret)
+    request = StockBarsRequest(symbol_or_symbols=ticker, start=start, end=end, timeframe=timeframe)
+    bars = client.get_stock_bars(request).df
+    bars.index = bars.index.droplevel(0)
+    bars.index = pd.to_datetime(bars.stack()).unstack().index
+    bars['ticker'] = ticker
+    bars['datetime'] = pd.to_datetime(bars.index, unit='s')
+    bars['date'] = bars['datetime'].dt.date
+
+    return bars
+
+
 def get_label(text, days=10, skip=1):
     try:
         year, month, day = get_timestamp(text)
@@ -80,12 +86,14 @@ def get_label(text, days=10, skip=1):
             f'{month} {day} {year}', '%B %d %Y')
         formatted_date = date_obj.strftime('%Y-%m-%d')
 
+        end_date_obj = date_obj + datetime.timedelta(days=days)
+
         key = (ticker, formatted_date)
         if key in labels_cache.contents:
             return labels_cache.contents[key]
 
-        data = yf.download(ticker, start=formatted_date, progress=False)
-        close = data['Close'].iloc[skip:]
+        data = download_ticker(ticker, date_obj, end_date_obj)
+        close = data['close'].iloc[skip:]
         log_return = np.diff(np.log(close.to_numpy()))
         window = log_return[:days]
 
@@ -109,9 +117,11 @@ def get_label(text, days=10, skip=1):
 
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
+print('Using device:', device)
 model_name = 'sentence-transformers/all-MiniLM-L6-v2'
 model = SentenceTransformer(model_name).to(device)
 model_dimension = 384
+batch_size = 64
 
 
 def get_features(text):
@@ -123,7 +133,14 @@ def get_features(text):
 
     sentences = text.split('\n')
 
-    embeddings = model.encode(sentences)
+    batches = [sentences[i:i + batch_size] for i in range(0, len(sentences), batch_size)]
+    embeddings = np.zeros((len(sentences), model_dimension))
+
+    for i in range(len(batches)):
+        batch = batches[i]
+        current_embeddings = model.encode(batch)
+        embeddings[len(batch) * i : len(batch) * (i + 1)] = current_embeddings
+
 
     features_cache.contents[key] = embeddings
     return embeddings

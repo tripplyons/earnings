@@ -48,14 +48,24 @@ async function main() {
   const browser = await puppeteer.launch({
     headless: true,
   });
-  const links = await findTranscriptLinksMultiPage(browser, 5);
+
+  const LIVE = process.env.SCRAPE_LIVE === '1';
+  const numPages = LIVE ? 1 : 100;
+  const outputFolder = LIVE ? 'live' : 'output';
+
+  const links = await findTranscriptLinksMultiPage(browser, numPages);
   console.log(links);
   for (let i = 0; i < links.length; i++) {
     const link = links[i];
-    const filename = 'live/' + path.basename(link) + '.txt';
+    const filename = outputFolder + '/' + path.basename(link) + '.txt';
     if (!fs.existsSync(filename)) {
-      const transcript = await scrapeTranscript(browser, link);
-      fs.writeFileSync(filename, transcript);
+      try {
+        const transcript = await scrapeTranscript(browser, link);
+        fs.writeFileSync(filename, transcript);
+      } catch (e) {
+        console.log('Error scraping ' + link);
+        console.log(e);
+      }
     } else {
       console.log('Skipping ' + filename);
     }

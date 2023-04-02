@@ -1,4 +1,4 @@
-from data import get_label, get_features, get_ticker, get_timestamp, get_market_cap, get_unix_timestamp, save_caches
+from data import get_label, get_features, get_ticker, get_timestamp, get_unix_timestamp, save_caches
 import os
 import numpy as np
 
@@ -10,10 +10,16 @@ def get_paths(path):
 
 
 def get_items(path):
+    i = 0
     for file in get_paths(path):
-        with open(file) as f:
-            text = f.read()
-        yield text
+        try:
+            with open(file) as f:
+                text = f.read()
+            yield text
+        except:
+            print('error reading', file, i)
+        
+        i += 1
 
 
 def make_dataset(path, max_items=None, save_every=100):
@@ -22,7 +28,6 @@ def make_dataset(path, max_items=None, save_every=100):
         'tickers': [],
         'features': [],
         'labels': [],
-        'market_caps': [],
         'group_num': []
     }
     current_group_num = 0
@@ -56,14 +61,12 @@ def make_dataset(path, max_items=None, save_every=100):
 
             current_features = get_features(item)
             label = get_label(item)
-            market_cap = get_market_cap(ticker)
 
             for feature in current_features:
                 items['features'].append(feature)
                 items['labels'].append(label)
                 items['tickers'].append(ticker)
                 items['timestamps'].append(unix_timestamp)
-                items['market_caps'].append(market_cap)
                 items['group_num'].append(current_group_num)
 
                 current_index += 1
@@ -84,7 +87,6 @@ def get_recent_features(path, start_time):
     features = []
     tickers = []
     timestamps = []
-    market_caps = []
 
     for i, item in enumerate(get_items(path)):
         ticker = get_ticker(item)
@@ -97,12 +99,10 @@ def get_recent_features(path, start_time):
             features.append(get_features(item))
             tickers.append(ticker)
             timestamps.append(unix_timestamp)
-            market_caps.append(get_market_cap(ticker))
 
     order = np.argsort(timestamps)
 
     ordered_features = [features[i] for i in order]
     ordered_tickers = [tickers[i] for i in order]
-    ordered_market_caps = [market_caps[i] for i in order]
 
-    return ordered_features, ordered_tickers, ordered_market_caps
+    return ordered_features, ordered_tickers

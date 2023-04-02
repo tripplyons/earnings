@@ -1,15 +1,15 @@
-from dataset import make_dataset, get_recent_features
+from dataset import make_dataset, get_recent_features, save_caches
 import numpy as np
-from sklearn.pipeline import make_pipeline
+from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
-from models import ForwardForwardRegressor
+from sklearn.linear_model import LinearRegression
 import time
 
 def make_model():
-    return make_pipeline(
-        StandardScaler(),
-        ForwardForwardRegressor(10, threshold=2, epochs=100)
-    )
+    return Pipeline([
+        ('scaler', StandardScaler()),
+        ('regressor', LinearRegression())
+    ])
 
 
 def train_model(train_features, train_labels):
@@ -34,8 +34,7 @@ def main():
         max_items=max_items,
         save_every=max_items + 1
     )
-
-    # save_caches()
+    save_caches()
 
     print('Training...')
 
@@ -83,8 +82,8 @@ def main():
 
     print('Correlation:', np.corrcoef(group_predictions, group_labels)[0, 1])
 
-    start_time = time.time() - 60 * 60 * 24 * 3
-    recent_features, recent_tickers, recent_market_caps = get_recent_features(
+    start_time = time.time() - 60 * 60 * 24 * 2
+    recent_features, recent_tickers = get_recent_features(
         live_data_dir, start_time)
     recent_predictions = []
 
