@@ -59,12 +59,15 @@ def get_unix_timestamp(year, month, day):
         timestamp = datetime.datetime.strptime(
             f'{month} {day} {year}', '%B %d %Y').timestamp()
         return timestamp
+    except KeyboardInterrupt:
+        print('interupted')
+        raise
     except:
         return 0
 
 
 def download_ticker(ticker, start, end):
-    timeframe = TimeFrame(1, TimeFrameUnit.Minute)
+    timeframe = TimeFrame(1, TimeFrameUnit.Day)
     client = StockHistoricalDataClient(api_key, api_secret)
     request = StockBarsRequest(symbol_or_symbols=ticker, start=start, end=end, timeframe=timeframe)
     bars = client.get_stock_bars(request).df
@@ -77,7 +80,7 @@ def download_ticker(ticker, start, end):
     return bars
 
 
-def get_label(text, days=10, skip=1):
+def get_label(text, days=5, skip=1):
     try:
         year, month, day = get_timestamp(text)
         ticker = get_ticker(text)
@@ -86,13 +89,14 @@ def get_label(text, days=10, skip=1):
             f'{month} {day} {year}', '%B %d %Y')
         formatted_date = date_obj.strftime('%Y-%m-%d')
 
-        end_date_obj = date_obj + datetime.timedelta(days=days)
+        end_date_obj = date_obj + datetime.timedelta(days=2 * days + skip)
 
         key = (ticker, formatted_date)
         if key in labels_cache.contents:
             return labels_cache.contents[key]
 
         data = download_ticker(ticker, date_obj, end_date_obj)
+
         close = data['close'].iloc[skip:]
         log_return = np.diff(np.log(close.to_numpy()))
         window = log_return[:days]
@@ -101,24 +105,27 @@ def get_label(text, days=10, skip=1):
             labels_cache.contents[key] = 0
             return 0
 
-        sharpe = np.sqrt(252) * np.mean(window) / np.std(window)
+        total_return = np.sum(window)
 
-        if np.isnan(sharpe):
+        if np.isnan(total_return):
             labels_cache.contents[key] = 0
             return 0
-        if not np.isfinite(sharpe):
+        if not np.isfinite(total_return):
             labels_cache.contents[key] = 0
             return 0
 
-        labels_cache.contents[key] = sharpe
-        return sharpe
+        labels_cache.contents[key] = total_return
+        return total_return
+    except KeyboardInterrupt:
+        print('interrupted')
+        raise
     except:
         return 0
 
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 print('Using device:', device)
-model_name = 'sentence-transformers/all-MiniLM-L6-v2'
+model_name = 'thenlper/gte-small'
 model = SentenceTransformer(model_name).to(device)
 model_dimension = 384
 batch_size = 64

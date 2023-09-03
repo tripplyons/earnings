@@ -9,6 +9,6 @@
   "author": "Tripp Lyons",
   "license": "UNLICENSED",
   "dependencies": {
-    "puppeteer": "^19.6.0"
+    "puppeteer": "^19.11.1"
   }
 }

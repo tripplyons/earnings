@@ -50,7 +50,7 @@ async function main() {
   });
 
   const LIVE = process.env.SCRAPE_LIVE === '1';
-  const numPages = LIVE ? 1 : 100;
+  const numPages = LIVE ? 1 : 1000;
   const outputFolder = LIVE ? 'live' : 'output';
 
   const links = await findTranscriptLinksMultiPage(browser, numPages);

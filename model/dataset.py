@@ -35,6 +35,8 @@ def make_dataset(path, max_items=None, save_every=100):
 
     try:
         for i, item in enumerate(get_items(path)):
+            print(f'{i} out of {max_items}')
+
             if max_items is not None and i >= max_items:
                 break
             if i % save_every == 0 and i != 0:

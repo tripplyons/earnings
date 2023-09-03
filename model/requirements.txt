@@ -1,0 +1,8 @@
+python-dotenv
+transformers[torch]
+sentence-transformers
+alpaca-py
+numpy
+pandas
+scikit-learn
+matplotlib
